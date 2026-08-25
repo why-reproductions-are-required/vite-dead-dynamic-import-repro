@@ -1,0 +1,19 @@
+{
+  "name": "vite-dead-dynamic-import-repro",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "browser-only-package": "file:./browser-only-package"
+  },
+  "devDependencies": {
+    "vite": "8.2.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "rolldown": "1.2.2"
+    }
+  }
+}
