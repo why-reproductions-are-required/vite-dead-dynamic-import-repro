@@ -2,6 +2,17 @@
 
 This repository reproduces an SSR build failure with Vite `8.2.0` and Rolldown `1.2.2`.
 
+## Observed upgrade boundary
+
+The vinext integration test passes with Vite+ `0.2.7`. That package bundles Vite `8.1.5` and Rolldown `1.2.0`. The test fails after an upgrade to Vite+ `0.2.8`, which bundles Vite `8.2.0` and Rolldown `1.2.2`.
+
+| Vite+ version | Bundled Vite | Bundled Rolldown | vinext result |
+| ------------- | ------------ | ---------------- | ------------- |
+| `0.2.7`       | `8.1.5`      | `1.2.0`          | Build passes  |
+| `0.2.8`       | `8.2.0`      | `1.2.2`          | Build fails   |
+
+The standalone source in this repository also fails with upstream Vite `8.1.5` and Rolldown `1.1.5`. Direct tests of the same source fail with Rolldown `1.2.0` and `1.2.2`. Rolldown `1.2.2` did not introduce the scope error. The Vite+ `0.2.8` upgrade makes the existing error reachable in the vinext build.
+
 ## Reproduce the failure
 
 ```sh
