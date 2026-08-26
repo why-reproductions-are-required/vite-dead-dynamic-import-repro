@@ -2,6 +2,8 @@
 
 This repository reproduces an SSR build failure with Vite `8.2.0` and Rolldown `1.2.2`.
 
+Upstream report: [rolldown/rolldown#10779](https://github.com/rolldown/rolldown/issues/10779)
+
 ## Reproduce the failure
 
 ```sh
