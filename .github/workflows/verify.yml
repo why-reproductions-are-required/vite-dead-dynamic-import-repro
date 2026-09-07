@@ -1,0 +1,52 @@
+name: Verify Rolldown fix
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.30.1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the Vite SSR reproduction
+        run: pnpm build
+
+      - name: Build the isolated Rolldown reproduction
+        run: >-
+          node node_modules/vite/dist/rolldown/cli.mjs
+          src/define-only.js
+          --platform browser
+          --dir dist-isolated
+          --transform.define 'typeof window:"undefined"'
+
+      - name: Check the generated chunks
+        shell: bash
+        run: |
+          test "$(find dist -type f -print | sort)" = "dist/server.js"
+          test "$(find dist-isolated -type f -print | sort)" = "dist-isolated/define-only.js"
+
+          if grep -REn 'browser-only-package|import[[:space:]]*\(' dist dist-isolated; then
+            echo "The generated output contains the dead browser-only import."
+            exit 1
+          fi
