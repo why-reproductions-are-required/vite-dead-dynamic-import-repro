@@ -3,17 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build"
+    "build": "vp build"
   },
   "dependencies": {
     "browser-only-package": "file:./browser-only-package"
   },
   "devDependencies": {
-    "vite": "8.2.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "rolldown": "1.2.2"
-    }
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.0.0-commit.15cc57f55e221b26ca82e7475ce90d22af8b5cd0",
+    "vite-plus": "0.0.0-commit.15cc57f55e221b26ca82e7475ce90d22af8b5cd0"
   }
 }

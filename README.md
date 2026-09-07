@@ -1,52 +1,39 @@
-# Vite dead dynamic import reproduction
+# Vite dead dynamic import fix verification
 
-This repository reproduces an SSR build failure with Vite `8.2.0` and Rolldown `1.2.2`.
+This branch verifies the fix for [rolldown/rolldown#10779](https://github.com/rolldown/rolldown/issues/10779).
 
-Upstream report: [rolldown/rolldown#10779](https://github.com/rolldown/rolldown/issues/10779)
+It uses the [Vite+ preview build from PR #2617](https://github.com/voidzero-dev/vite-plus/pull/2617#issuecomment-5560311220). The preview contains Vite `8.2.2`, Rolldown `1.2.7`, and Oxc `0.148.0`.
 
-## Reproduce the failure
+## Verify the fix
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm build
 ```
 
-Vite reports this error:
+The build must succeed. It must write only `dist/server.js`. The output must not contain the browser-only dynamic import.
 
-```text
-"./browser" is not exported under the conditions ["module", "node", "production", "import"]
+The server output is:
+
+```js
+var value = "server";
+export { value };
 ```
 
-## Version boundary
-
-The vinext integration test passes with Vite+ `0.2.7`. That package bundles Vite `8.1.5` and Rolldown `1.2.0`.
-
-The test fails with Vite+ `0.2.8`. That package bundles Vite `8.2.0` and Rolldown `1.2.2`.
+## Version comparison
 
 | Vite+ | Vite | Rolldown | Result |
 | --- | --- | --- | --- |
-| `0.2.7` | `8.1.5` | `1.2.0` | Pass |
+| `0.2.7` | `8.1.5` | `1.2.0` | Pass because dead-code elimination hides the scope error |
 | `0.2.8` | `8.2.0` | `1.2.2` | Fail |
+| `0.3.0` | `8.2.2` | `1.2.5` | Fail |
+| Preview `15cc57f` | `8.2.2` | `1.2.7` | Pass with the scope fix |
 
-Direct Rolldown tests locate the behavior change between `1.2.0` and `1.2.1`:
+The preview and Vite+ `0.3.0` use the same Vite version. The Rolldown update changes the result.
 
-| Rolldown | Result for `src/server.js` |
-| --- | --- |
-| `1.2.0` | Removes `load()` and the dynamic import |
-| `1.2.1` through `1.2.5` | Keeps `load()` and the dynamic import |
+## Cause and fix
 
-Run both versions against the same source:
-
-```sh
-pnpm dlx rolldown@1.2.0 src/server.js --platform browser --dir /tmp/rolldown-1.2.0 --transform.define 'typeof window:"undefined"'
-pnpm dlx rolldown@1.2.1 src/server.js --platform browser --dir /tmp/rolldown-1.2.1 --transform.define 'typeof window:"undefined"'
-```
-
-Rolldown `1.2.0` writes one server chunk without `load`. Rolldown `1.2.1` writes the server chunk and a browser chunk.
-
-## Cause
-
-The source calls an unexported function. Its default parameter can evaluate a dynamic import:
+The source uses a global `window` reference in a default parameter. The function body has a separate `var window` binding:
 
 ```js
 function load(
@@ -59,30 +46,14 @@ function load(
 load();
 ```
 
-Rolldown `1.2.0` removes `load()` because Oxc classifies the call as side-effect-free. The default parameter can run the dynamic import, so removing the call changes program behavior.
+JavaScript evaluates the default parameter outside the function body environment. The body declaration does not bind the `window` reference in the parameter. See the [ECMAScript function initialization algorithm](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-functiondeclarationinstantiation).
 
-[Oxc PR #24791](https://github.com/oxc-project/oxc/pull/24791) fixes that dead-code elimination error. [Rolldown PR #10497](https://github.com/rolldown/rolldown/pull/10497) updates Rolldown to Oxc `0.142.0`, which contains the fix. Rolldown `1.2.1` includes that update and keeps `load()`.
+Older Rolldown versions treat the body declaration as visible in the default parameter. The `define` transform does not replace `typeof window`. Rolldown then resolves the browser-only import during the server build.
 
-The retained call exposes a separate problem in Rolldown's native `define` transform. The transform does not replace `typeof window` in the default parameter because the function body declares `var window`.
+[Oxc PR #26099](https://github.com/oxc-project/oxc/pull/26099) corrects reference resolution for default parameters. [Rolldown PR #10809](https://github.com/rolldown/rolldown/pull/10809) updates Oxc to `0.148.0` and includes the fix.
 
-JavaScript gives default parameters a separate environment. The body declaration does not bind the `window` reference in the default parameter. See the [ECMAScript function initialization algorithm](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-functiondeclarationinstantiation).
+Rolldown `1.2.7` replaces the default value with `null`. It does not resolve the dead browser-only import.
 
-The native `define` scope problem exists in Rolldown `1.2.0`. That release hides the problem in `src/server.js` because its dead-code elimination removes the function call. The Oxc fix in Rolldown `1.2.1` makes the scope problem visible in the vinext build.
+## Isolated Rolldown case
 
-## Expected result
-
-The server build replaces `typeof window` with `"undefined"`. Rolldown then removes the false branch and does not resolve the browser-only import.
-
-## Isolate the native define problem
-
-[`src/define-only.js`](src/define-only.js) exports `load`, so Rolldown cannot remove the function. This file shows the native `define` scope problem without depending on the dead-code elimination change.
-
-Rolldown keeps the dynamic import even with this transform option:
-
-```js
-{
-  define: {
-    "typeof window": '"undefined"',
-  },
-}
-```
+[`src/define-only.js`](src/define-only.js) exports `load`. This prevents dead-code elimination from removing the function before the `define` transform runs.
